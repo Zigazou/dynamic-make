@@ -32,8 +32,10 @@ They use the `%q` placeholder of the `printf` command. It escapes any string for
 
 The main difference reside in the escaping of the `'` character which is special for Bash but not for the `make` command.
 
-    escape_make() { printf '%q' "${1:2}" | sed "s/\\\\'/'/g"; }
-    escape_shell() { printf '%q' "${1:2}"; }
+```Bash
+escape_make() { printf '%q' "${1:2}" | sed "s/\\\\'/'/g"; }
+escape_shell() { printf '%q' "${1:2}"; }
+```
 
 ### Generating a filter for the `find` command
 
@@ -41,26 +43,34 @@ The `make_filter` function is also an helper function which helps you to generat
 
 It generates a string of the following form:
 
-    # make_filter ext1 ext2 ext3
-    -type f ( -name *.ext1 -o -name *.ext2 -o -name *.ext3 )
+```Shell
+$ make_filter ext1 ext2 ext3
+-type f ( -name *.ext1 -o -name *.ext2 -o -name *.ext3 )
+```
 
 It is very useful since such a string needs to be escaped for Bash:
 
-    find . -type f \( -name \*.ext1 -o -name \*.ext2 -o -name \*.ext3 \)
+```Shell
+find . -type f \( -name \*.ext1 -o -name \*.ext2 -o -name \*.ext3 \)
+```
 
-    vs
+vs
 
-    find . -type f $(make_filter ext1 ext2 ext3)
+```Shell
+find . -type f $(make_filter ext1 ext2 ext3)
+```
 
 Here’s the source code of this function:
 
-    make_filter() {
-        local filters
+```Bash
+make_filter() {
+    local filters
 
-        printf -- '-type f ( '
-        filters="$(for ext in $*; do printf -- '-name *.%s -o ' "$ext"; done)"
-        printf '%s )' "${filters% -o }"
-    }
+    printf -- '-type f ( '
+    filters="$(for ext in $*; do printf -- '-name *.%s -o ' "$ext"; done)"
+    printf '%s )' "${filters% -o }"
+}
+```
 
 ### Generating the all target
 
@@ -72,34 +82,38 @@ The `set -o noglob` instructs Bash not to expands strings like `*.html`.
 
 In this example, we are looking the all html, css, js, svg, xml and json files. These are highly compressible text files that later will be compressed with Zopfli (.gz) and Brotli (.br).
 
-    set -o noglob
-    compressible="$(make_filter html css js svg xml json)"
+```Bash
+set -o noglob
+compressible="$(make_filter html css js svg xml json)"
 
-    printf 'all:'
-    find . -type f $compressible | while read filepath
-    do
-        fem="$(escape_make "$filepath")"
-        printf ' %s.gz %s.br' "$fem" "$fem"
-    done
-    printf '\n'
+printf 'all:'
+find . -type f $compressible | while read filepath
+do
+    fem="$(escape_make "$filepath")"
+    printf ' %s.gz %s.br' "$fem" "$fem"
+done
+printf '\n'
+```
 
 ### Generating each rule
 
 For each compressible file, there will be two rules: one for the Zopfli compression and one for the Brotli compression. This allows parallelization of jobs.
 
-    find . $compressible | while read filepath
-    do
-        fem="$(escape_make "$filepath")"
-        fes="$(escape_shell "$filepath")"
+```Bash
+find . $compressible | while read filepath
+do
+    fem="$(escape_make "$filepath")"
+    fes="$(escape_shell "$filepath")"
 
-        printf '%s.gz: %s\n' "$fem" "$fem"
-        printf '\tzopfli --i127 %s\n' "$fes"
-        printf '\n'
+    printf '%s.gz: %s\n' "$fem" "$fem"
+    printf '\tzopfli --i127 %s\n' "$fes"
+    printf '\n'
 
-        printf '%s.br: %s\n' "$fem" "$fem"
-        printf '\tbrotli --quality 15 --input %s --output %s.br\n' "$fes" "$fes"
-        printf '\n'
-    done
+    printf '%s.br: %s\n' "$fem" "$fem"
+    printf '\tbrotli --quality 15 --input %s --output %s.br\n' "$fes" "$fes"
+    printf '\n'
+done
+```
 
 How to use it
 -------------
@@ -108,7 +122,9 @@ The script only generates a `Makefile` on the standard output.
 
 You use it like that:
 
-    bash genmakefile.bash | make -f- -j4
+```Shell
+bash genmakefile.bash | make -f- -j4
+```
 
 Adjust the `j` parameter to the number of parallel jobs you want to run.    
 
@@ -117,6 +133,7 @@ Output example
 
 Here’s an example of what the `genmakefile.bash` script can generate.
 
+```Makefile
     all: about.html.gz about.html.br faq.html.gz faq.html.br blog.html.gz blog.html.br blog-post.html.gz blog-post.html.br css/all.css.gz css/all.css.br css/style.css.gz css/style.css.br css/jquery.fancybox.min.css.gz css/jquery.fancybox.min.css.br css/owl.carousel.min.css.gz css/owl.carousel.min.css.br js/owl.carousel.min.js.gz js/owl.carousel.min.js.br js/contact_me.js.gz js/contact_me.js.br js/jquery.appear.js.gz js/jquery.appear.js.br js/jquery.fancybox.min.js.gz js/jquery.fancybox.min.js.br js/script.js.gz js/script.js.br js/jqBootstrapValidation.js.gz js/jqBootstrapValidation.js.br js/imagesloaded.pkgd.min.js.gz js/imagesloaded.pkgd.min.js.br js/filter.js.gz js/filter.js.br js/isotope.pkgd.min.js.gz js/isotope.pkgd.min.js.br contact.html.gz contact.html.br webfonts/fa-brands-400.svg.gz webfonts/fa-brands-400.svg.br webfonts/fa-regular-400.svg.gz webfonts/fa-regular-400.svg.br webfonts/fa-solid-900.svg.gz webfonts/fa-solid-900.svg.br index.html.gz index.html.br services.html.gz services.html.br 404.html.gz 404.html.br portfolio-4-col.html.gz portfolio-4-col.html.br vendor/jquery/jquery.min.js.gz vendor/jquery/jquery.min.js.br vendor/bootstrap/css/bootstrap.min.css.gz vendor/bootstrap/css/bootstrap.min.css.br vendor/bootstrap/js/bootstrap.bundle.min.js.gz vendor/bootstrap/js/bootstrap.bundle.min.js.br portfolio-3-col.html.gz portfolio-3-col.html.br pricing.html.gz pricing.html.br portfolio-item.html.gz portfolio-item.html.br
 
     about.html.gz: about.html
@@ -304,3 +321,4 @@ Here’s an example of what the `genmakefile.bash` script can generate.
 
     portfolio-item.html.br: portfolio-item.html
         brotli --quality 15 --input portfolio-item.html --output portfolio-item.html.br
+```
